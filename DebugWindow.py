@@ -20,7 +20,7 @@ class DebugWindow():
         self.filter_entry = gtk.Entry()
         self.filter_btn = gtk.Button("Filter")
         self.filter_box.pack_start(self.filter_entry)
-        self.filter_box.pack_start(self.filter_btn)
+        self.filter_box.pack_start(self.filter_btn, False)
         self.vbox.pack_start(self.filter_box, False)
 
         self.vbox.pack_start(self.scroll_view)
