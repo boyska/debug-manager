@@ -1,4 +1,5 @@
 import gtk
+import pango
 '''A module to handle a debug console'''
 
 
@@ -8,9 +9,10 @@ class DebugWindow():
         self.window.set_title("debug")
         self.window.connect("delete_event", self.on_delete)
         self.store = DebugStore()
-        self.view = DebugView(self.store.filter)
+        self.view = DebugView(self.store)
         self.scroll_view = gtk.ScrolledWindow()
         self.scroll_view.add(self.view)
+
         
         self.vbox = gtk.VBox()
         self.filter_box = gtk.HBox()
@@ -39,19 +41,22 @@ class DebugWindow():
         self.window.add(self.vbox)
 
         self.filter_btn.connect("clicked", self.on_filter_clicked)
+        self.filter_entry.connect("activate", self.on_filter_clicked)
         self.close_btn.connect("clicked", self.on_close)
         self.test_add.connect("clicked", self.on_add)
+        self.test_entry.connect("activate", self.on_add)
 
         self.store.append([ "foo", "bar" ])
         self.store.append([ "asd", "qwe" ])
+
+        self.buffer = DebugBuffer(self.store)
 
     def show( self ):
         self.window.show_all()
 
     def on_filter_clicked(self, button, data=None):
         pattern = self.filter_entry.get_text()
-        self.store.filter_caller(pattern)
-        self.view.set_model(self.store.filter)
+        self.view.filter_caller(pattern)
 
     def on_add(self, button, data=None):
         caller = self.test_entry.get_text()
@@ -66,30 +71,46 @@ class DebugWindow():
         return False
 
 
-class DebugView( gtk.TreeView ):
-    '''A TreeView optimized for debug consoles'''
+class DebugView( gtk.TextView ):
+    '''A TextView optimized for debug consoles'''
     def __init__(self, store):
-        gtk.TreeView.__init__(self, store)
+        gtk.TextView.__init__(self)
+        self.store = store
+        self.buffer = DebugBuffer(store)
+        self.set_buffer(self.buffer)
 
-        self.columns = []
-        self.columns.append( gtk.TreeViewColumn('Caller') )
-        self.append_column(self.columns[0])
+        self.set_editable(False)
 
-        self.cell = gtk.CellRendererText()
-        self.columns[0].pack_start(self.cell, True)
+    def filter_caller(self, pattern):
+        self.store.filter_caller(pattern)
+        self.buffer = DebugBuffer(self.store.filter)
+        self.set_buffer(self.buffer)
 
-        self.columns[0].add_attribute(self.cell, 'text', 0)
-        
-        self.columns.append( gtk.TreeViewColumn('Message') )
-        self.append_column(self.columns[1])
+class DebugBuffer( gtk.TextBuffer ):
+    '''A TextBuffer based on a ListStore'''
+    def __init__(self, store):
+        gtk.TextBuffer.__init__(self)
+        self.store = store
 
-        self.cell = gtk.CellRendererText()
-        self.columns[1].pack_start(self.cell, True)
+        self.create_tag("caller", weight=pango.WEIGHT_BOLD)
+        self.create_tag("message")
 
-        self.columns[1].add_attribute(self.cell, 'text', 1)
-        
-        self.set_search_column( 0 )
+        self.iter = self.get_start_iter()
+        for row in store:
+            self.insert_with_tags_by_name(self.iter, row[0], "caller")
+            self.insert_with_tags_by_name(self.iter, ": " + row[1], "message")
+            print row[0], ":", row[1]
 
+        store.connect("row-changed", self.on_store_insert)
+
+
+    def on_store_insert(self, model, path, iter):
+        caller = model.get_value(iter, 0)
+        message =  model.get_value(iter,1)
+        if caller and message:
+            self.insert_with_tags_by_name(self.iter, caller, "caller")
+            self.insert_with_tags_by_name(self.iter, ": " + message + '\n', "message")
+            print caller, ':', message
 
 class DebugStore( gtk.ListStore ):
     '''A ListStore with filtering and more, optimized for debug'''
@@ -97,9 +118,7 @@ class DebugStore( gtk.ListStore ):
         '''constructor'''
         gtk.ListStore.__init__(self, str, str) #caller, message
         self.filter = self.filter_new()
-        #self.filter_caller('a')
         
-        #self.filter.set_modify_func( [str] , modifier)
 
     def filter_caller( self, name ):
         '''displays only the messages whose caller matches "name"'''
@@ -107,12 +126,6 @@ class DebugStore( gtk.ListStore ):
         self.filter = self.filter_new()
         self.filter.set_visible_func(filter_func, name)
     
-    
-
-def modifier(model, iter, column):
-    print column
-    return "%s :   %s" % ( model.get_model().get_value(iter, 0) , model.get_model().get_value(iter, 1) )
-
 def filter_func(model, iter, name):
     '''returns true if the caller column matches name'''
     caller = model.get_value(iter, 0)
