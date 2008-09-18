@@ -4,6 +4,7 @@ import pango
 
 
 class DebugWindow():
+
     '''The window containing the debug info'''
     def __init__(self, debug_manager):
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
@@ -47,8 +48,6 @@ class DebugWindow():
         self.test_add.connect("clicked", self.on_add)
         self.test_entry.connect("activate", self.on_add)
 
-        #self.buffer = DebugBuffer(self.store)
-
     def show( self ):
         '''shows the window'''
         self.window.show_all()
@@ -70,7 +69,6 @@ class DebugWindow():
     def on_delete(self, widget, event, data=None):
         gtk.main_quit()
         return False
-
 
 class DebugView( gtk.TextView ):
     '''A TextView optimized for debug consoles'''
@@ -151,12 +149,21 @@ class DebugManager:
     def __init__(self):
         '''constructor'''
         self.messages = [] #list of messages, each one is a dict
+        self.message_limit = -1
 
         self.__event_callbacks = {}
+
+    def set_size_limit(self, limit):
+        '''maximum size of the messages list, -1 is infinite'''
+        self.message_limit = limit
 
     def add(self, message):
         '''add the message'''
         #message is {'category': 'misc', 'message':'foo', 'priority':'low',...}
+        if len(self.messages) == self.message_limit:
+            self.emit('message-removed', self.messages[0])
+            self.messages.pop(0)
+
         self.messages.append(message)
         self.emit('message-added', message)
 
@@ -171,6 +178,8 @@ class DebugManager:
 #Event handling
     def emit(self, event_name, *args):
         '''emits the signal named event_name'''
+        if event_name not in self.__event_callbacks:
+            return
         for callback in self.__event_callbacks[event_name]:
             callback(*args)
 
@@ -186,6 +195,7 @@ def simple_print(message):
 
 if __name__ == '__main__':
     debug_manager = DebugManager()
+    debug_manager.set_size_limit(1)
     debug_manager.connect('message-added', simple_print)
     debug_manager.add({'category':'core', 'message':'something happened'})
     debug_manager.add({'category':'ui', 'message':'WTF??'})
