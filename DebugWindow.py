@@ -1,9 +1,10 @@
+'''A module to handle a debug console'''
 import gtk
 import pango
-'''A module to handle a debug console'''
 
 
 class DebugWindow():
+    '''The window containing the debug info'''
     def __init__(self):
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
         self.window.set_title("debug")
@@ -52,9 +53,11 @@ class DebugWindow():
         self.buffer = DebugBuffer(self.store)
 
     def show( self ):
+        '''shows the window'''
         self.window.show_all()
 
     def on_filter_clicked(self, button, data=None):
+        '''used when the filter button is clicked'''
         pattern = self.filter_entry.get_text()
         self.view.filter_caller(pattern)
 
@@ -106,7 +109,7 @@ class DebugBuffer( gtk.TextBuffer ):
 
     def on_store_insert(self, model, path, iter):
         caller = model.get_value(iter, 0)
-        message =  model.get_value(iter,1)
+        message =  model.get_value(iter, 1)
         if caller and message:
             self.insert_with_tags_by_name(self.iter, caller, "caller")
             self.insert_with_tags_by_name(self.iter, ": " + message + '\n', "message")
@@ -135,8 +138,48 @@ def filter_func(model, iter, name):
         return False
     return True
 
+class DebugManager:
+    '''Manages debug informations, events and cleanups'''
+    def __init__(self):
+        '''constructor'''
+        self.messages = [] #list of messages, each one is a dict
+
+        self.__event_callbacks = {}
+
+    def add(self, message):
+        '''add the message'''
+        #message is {'category': 'misc', 'message':'foo', 'priority':'low',...}
+        self.messages.append(message)
+        self.emit('message-added', message)
+
+    def get_all(self):
+        '''get all messages'''
+        return self.messages
+    
+    def get_n(self, n):
+        '''return the nth message'''
+        return self.messages[n]
+
+#Event handling
+    def emit(self, event_name, *args):
+        '''emits the signal named event_name'''
+        for callback in self.__event_callbacks[event_name]:
+            callback(*args)
+
+    def connect(self, event_name, callback):
+        '''connect the event called "event_name" with the callback'''
+        if event_name not in self.__event_callbacks:
+            self.__event_callbacks[event_name] = []
+        self.__event_callbacks[event_name].append(callback)
+        
+def simple_print(message):
+    print message
+
 
 if __name__ == '__main__':
+    debug_manager = DebugManager()
+    debug_manager.connect('message-added', simple_print)
+    debug_manager.add({'category':'core', 'message':'something happened'})
     app = DebugWindow()
     app.show()
     gtk.main()
