@@ -5,11 +5,11 @@ import pango
 
 class DebugWindow():
     '''The window containing the debug info'''
-    def __init__(self):
+    def __init__(self, debug_manager):
         self.window = gtk.Window(gtk.WINDOW_TOPLEVEL)
         self.window.set_title("debug")
         self.window.connect("delete_event", self.on_delete)
-        self.store = DebugStore()
+        self.store = DebugStore(debug_manager)
         self.view = DebugView(self.store)
         self.scroll_view = gtk.ScrolledWindow()
         self.scroll_view.add(self.view)
@@ -47,10 +47,7 @@ class DebugWindow():
         self.test_add.connect("clicked", self.on_add)
         self.test_entry.connect("activate", self.on_add)
 
-        self.store.append([ "foo", "bar" ])
-        self.store.append([ "asd", "qwe" ])
-
-        self.buffer = DebugBuffer(self.store)
+        #self.buffer = DebugBuffer(self.store)
 
     def show( self ):
         '''shows the window'''
@@ -63,7 +60,8 @@ class DebugWindow():
 
     def on_add(self, button, data=None):
         caller = self.test_entry.get_text()
-        self.store.append([caller, "just a test"])
+        #self.store.append([caller, "just a test"])
+        self.store.add({'category':caller, 'message':'just a test'})
 
     def on_close(self, button, data=None):
         gtk.main_quit()
@@ -102,7 +100,7 @@ class DebugBuffer( gtk.TextBuffer ):
         for row in store:
             self.insert_with_tags_by_name(self.iter, row[0], "caller")
             self.insert_with_tags_by_name(self.iter, ": " + row[1], "message")
-            print row[0], ":", row[1]
+            self.insert(self.iter, '\n')
 
         store.connect("row-changed", self.on_store_insert)
 
@@ -113,15 +111,25 @@ class DebugBuffer( gtk.TextBuffer ):
         if caller and message:
             self.insert_with_tags_by_name(self.iter, caller, "caller")
             self.insert_with_tags_by_name(self.iter, ": " + message + '\n', "message")
-            print caller, ':', message
 
 class DebugStore( gtk.ListStore ):
     '''A ListStore with filtering and more, optimized for debug'''
-    def __init__( self ):
+    def __init__( self, debug_manager ):
         '''constructor'''
         gtk.ListStore.__init__(self, str, str) #caller, message
+        self.debug_manager = debug_manager
         self.filter = self.filter_new()
         
+        for message in debug_manager.get_all():
+            self.on_message_added(message)
+        debug_manager.connect('message-added', self.on_message_added)
+    
+    def on_message_added(self, message):
+        self.append([message['category'], message['message']])
+
+    def add(self, message):
+        #a "pure" debugstore shouldn't have this, but it's just to test sth
+        self.debug_manager.add(message)
 
     def filter_caller( self, name ):
         '''displays only the messages whose caller matches "name"'''
@@ -180,6 +188,7 @@ if __name__ == '__main__':
     debug_manager = DebugManager()
     debug_manager.connect('message-added', simple_print)
     debug_manager.add({'category':'core', 'message':'something happened'})
-    app = DebugWindow()
+    debug_manager.add({'category':'ui', 'message':'WTF??'})
+    app = DebugWindow(debug_manager)
     app.show()
     gtk.main()
